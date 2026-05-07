@@ -18,23 +18,59 @@ const GlobalStyles = () => {
     const style = document.createElement("style");
     style.innerHTML = `
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      html { scroll-behavior: smooth; overflow-x: hidden; }
-      html, body, #root {
+      html {
+        scroll-behavior: smooth;
+        overflow-x: hidden;
+        overflow-y: scroll;
+        height: 100%;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+      body {
+        font-family: 'Palatino Linotype', Georgia, serif;
         width: 100%;
         min-height: 100%;
         margin: 0;
         padding: 0;
         overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        will-change: scroll-position;
       }
-      body { font-family: 'Palatino Linotype', Georgia, serif; }
+      #root {
+        width: 100%;
+        min-height: 100%;
+        overflow-x: hidden;
+      }
       img { max-width: 100%; display: block; }
       .desktop-nav { display: flex; }
       @media (max-width: 900px) { .desktop-nav { display: none !important; } }
       @keyframes float { 0%,100%{transform:translateY(-10px)} 50%{transform:translateY(10px)} }
       @keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
+      @keyframes liveRingRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes liveRadialPulse { 0%,100%{transform:scale(1);opacity:0.45;} 50%{transform:scale(1.22);opacity:0;} }
+      @keyframes orbGlowPulse {
+        0%,100%{ box-shadow: 0 0 28px rgba(139,92,246,0.55), 0 0 56px rgba(219,39,119,0.22), inset 0 0 18px rgba(255,255,255,0.12); }
+        50%{ box-shadow: 0 0 52px rgba(139,92,246,0.85), 0 0 96px rgba(219,39,119,0.45), inset 0 0 28px rgba(255,255,255,0.22); }
+      }
+      @keyframes orbAuraSpin {
+        0%{ transform: rotate(0deg) scale(1); }
+        50%{ transform: rotate(180deg) scale(1.06); }
+        100%{ transform: rotate(360deg) scale(1); }
+      }
+      @keyframes neonRingBooking {
+        0%,100%{ opacity:0.6; transform:scale(1); }
+        50%{ opacity:1; transform:scale(1.04); }
+      }
+      @keyframes bookingSuccessRipple {
+        0%{ transform:scale(0.6); opacity:0.8; }
+        100%{ transform:scale(2.2); opacity:0; }
+      }
       ::-webkit-scrollbar { width: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: #3A7D7C; border-radius: 3px; }
+      * { -webkit-tap-highlight-color: transparent; }
     `;
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
@@ -265,6 +301,7 @@ function BookingModal({ item, type, onClose, c }) {
   const [email, setEmail] = useState("");
   const [booked, setBooked] = useState(false);
   const [errors, setErrors] = useState({});
+  const [ripples, setRipples] = useState(false);
 
   const validate = () => {
     const e = {};
@@ -277,6 +314,28 @@ function BookingModal({ item, type, onClose, c }) {
     const e = validate();
     if (Object.keys(e).length) return setErrors(e);
     setBooked(true);
+    setRipples(true);
+    // Fire booking notification
+    const className = item.name || item.class || "Yoga Session";
+    const instructorPart = item.instructor ? ` with ${item.instructor}` : "";
+    const timePart = type === "schedule" && item.time ? ` — ${item.day} at ${item.time}` : "";
+    emitBookingNotification({
+      id: Date.now(),
+      icon: "✅",
+      msg: `Booking confirmed: ${className}${instructorPart}`,
+      sub: `${timePart || "Your spot is reserved"} · Confirmation sent to ${email}`,
+      isBooking: true,
+    });
+    // Also fire a follow-up reminder notification after 3s
+    setTimeout(() => {
+      emitBookingNotification({
+        id: Date.now() + 1,
+        icon: "⏰",
+        msg: `Reminder: ${className} starts soon`,
+        sub: "We look forward to seeing you on the mat 🙏",
+        isBooking: true,
+      });
+    }, 3200);
   };
 
   const inp = { background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "12px 16px", color: c.text, width: "100%", outline: "none", fontSize: 14, fontFamily: "inherit" };
@@ -312,12 +371,19 @@ function BookingModal({ item, type, onClose, c }) {
             </div>
           </>
         ) : (
-          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ textAlign: "center", padding: "24px 0" }}>
-            <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 0.6 }} style={{ fontSize: 64, marginBottom: 16 }}>🌿</motion.div>
-            <h3 style={{ color: c.primary, fontFamily: "'Georgia', serif", fontSize: 26, marginBottom: 8 }}>Booking Confirmed!</h3>
-            <p style={{ color: c.textMuted, fontSize: 14, marginBottom: 28 }}>A confirmation has been sent to {email}</p>
+          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ textAlign: "center", padding: "24px 0", position: "relative" }}>
+            {/* Success ripple bursts */}
+            {ripples && [0, 1, 2].map((i) => (
+              <motion.div key={i} initial={{ scale: 0.6, opacity: 0.7 }} animate={{ scale: 2.4, opacity: 0 }}
+                transition={{ duration: 1.4, delay: i * 0.28, ease: "easeOut" }}
+                style={{ position: "absolute", top: "50%", left: "50%", width: 90, height: 90, marginLeft: -45, marginTop: -45, borderRadius: "50%", border: `2px solid ${c.primary}`, pointerEvents: "none", zIndex: 0 }} />
+            ))}
+            <motion.div animate={{ scale: [1, 1.25, 1], rotate: [0, 8, -8, 0] }} transition={{ duration: 0.8 }} style={{ fontSize: 64, marginBottom: 16, position: "relative", zIndex: 1 }}>🌿</motion.div>
+            <h3 style={{ color: c.primary, fontFamily: "'Georgia', serif", fontSize: 26, marginBottom: 8, position: "relative", zIndex: 1 }}>Booking Confirmed!</h3>
+            <p style={{ color: c.textMuted, fontSize: 14, marginBottom: 6, position: "relative", zIndex: 1 }}>A confirmation has been sent to {email}</p>
+            <p style={{ color: c.textMuted, fontSize: 12, marginBottom: 28, position: "relative", zIndex: 1, opacity: 0.7 }}>Check your notifications for class reminders 🔔</p>
             <motion.button whileHover={{ scale: 1.03 }} onClick={onClose}
-              style={{ background: `linear-gradient(135deg, ${c.primary}, ${c.secondary})`, color: "#fff", border: "none", borderRadius: 12, padding: "12px 40px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+              style={{ background: `linear-gradient(135deg, ${c.primary}, ${c.secondary})`, color: "#fff", border: "none", borderRadius: 12, padding: "12px 40px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer", position: "relative", zIndex: 1 }}>
               Wonderful! ✨
             </motion.button>
           </motion.div>
@@ -335,6 +401,17 @@ function Navbar({ c, dark, toggleDark, setBookingModal }) {
   const [megaMenu, setMegaMenu] = useState(null);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
+
+  const logoVariants = {
+    hidden: { opacity: 0, y: -12, scale: 0.94 },
+    visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.5, ease: "easeOut" } },
+    hover: { rotate: [0, -10, 10, 0], scale: 1.05, transition: { duration: 0.55, ease: "easeInOut" } },
+  };
+
+  const navItemVariants = {
+    hidden: (index) => ({ opacity: 0, y: -12, transition: { delay: index * 0.05, duration: 0.28, ease: "easeOut" } }),
+    visible: { opacity: 1, y: 0, transition: { duration: 0.28, ease: "easeOut" } },
+  };
 
   useEffect(() => { setMenuOpen(false); setMegaMenu(null); }, [location]);
   useEffect(() => {
@@ -366,13 +443,18 @@ function Navbar({ c, dark, toggleDark, setBookingModal }) {
       }}>
       <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", alignItems: "center", height: 72 }}>
         <Link to="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10 }}>
-          <motion.span whileHover={{ rotate: 180 }} transition={{ duration: 0.5 }} style={{ fontSize: 30, display: "inline-block" }}>☸️</motion.span>
-          <span style={{ fontFamily: "'Georgia', serif", fontSize: 24, color: c.primary, fontStyle: "italic", letterSpacing: 1 }}>Praṇa</span>
+          <motion.span variants={logoVariants} initial="hidden" animate="visible" whileHover="hover"
+            style={{ fontSize: 30, display: "inline-block" }}>☸️</motion.span>
+          <motion.span initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.4 }}
+            style={{ fontFamily: "'Georgia', serif", fontSize: 24, color: c.primary, fontStyle: "italic", letterSpacing: 1 }}>
+            Praṇa
+          </motion.span>
         </Link>
         <div style={{ flex: 1 }} />
         <div style={{ display: "flex", gap: 2, alignItems: "center" }} className="desktop-nav">
-          {navLinks.map((link) => (
-            <div key={link.to} style={{ position: "relative" }} onMouseEnter={() => link.mega && setMegaMenu(link.mega)} onMouseLeave={() => setMegaMenu(null)}>
+          {navLinks.map((link, index) => (
+            <motion.div key={link.to} custom={index} variants={navItemVariants} initial="hidden" animate="visible" whileHover={{ y: -2, scale: 1.02 }}
+              style={{ position: "relative", display: "inline-block" }} onMouseEnter={() => link.mega && setMegaMenu(link.mega)} onMouseLeave={() => setMegaMenu(null)}>
               <NavLink to={link.to} style={({ isActive }) => ({
                 textDecoration: "none", padding: "7px 14px", borderRadius: 8, fontSize: 14,
                 fontWeight: isActive ? 600 : 400,
@@ -404,17 +486,17 @@ function Navbar({ c, dark, toggleDark, setBookingModal }) {
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
+            </motion.div>
           ))}
-          <motion.button whileHover={{ scale: 1.05, boxShadow: `0 0 24px ${c.primary}60` }} whileTap={{ scale: 0.97 }}
-            onClick={() => setBookingModal({ item: { name: "Free Trial Session" }, type: "class" })}
-            style={{ marginLeft: 12, background: `linear-gradient(135deg, ${c.primary}, ${c.secondary})`, color: "#fff", border: "none", borderRadius: 10, padding: "9px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            Book Free Class
-          </motion.button>
         </div>
         <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={toggleDark}
           style={{ marginLeft: 14, background: `${c.primary}22`, border: `1px solid ${c.border}`, borderRadius: 8, padding: "7px 11px", cursor: "pointer", fontSize: 17 }} aria-label="Toggle dark mode">
           {dark ? "☀️" : "🌙"}
+        </motion.button>
+        <motion.button whileHover={{ scale: 1.05, boxShadow: `0 0 24px ${c.primary}60` }} whileTap={{ scale: 0.97 }}
+          onClick={() => setBookingModal({ item: { name: "Free Trial Session" }, type: "class" })}
+          style={{ marginLeft: 12, background: `linear-gradient(135deg, ${c.primary}, ${c.secondary})`, color: "#fff", border: "none", borderRadius: 10, padding: "9px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          Book Free Class
         </motion.button>
         <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setMenuOpen((v) => !v)}
           style={{ marginLeft: 12, background: "transparent", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", gap: 5, padding: 6 }} aria-label="Menu">
@@ -429,10 +511,13 @@ function Navbar({ c, dark, toggleDark, setBookingModal }) {
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
             style={{ overflow: "hidden", borderTop: `1px solid ${c.border}`, background: c.glass, backdropFilter: "blur(24px)" }}>
             <div style={{ padding: "16px 0" }}>
-              {navLinks.map((link) => (
-                <NavLink key={link.to} to={link.to} style={({ isActive }) => ({ display: "block", textDecoration: "none", padding: "12px clamp(20px, 5vw, 60px)", color: isActive ? c.primary : c.text, fontWeight: isActive ? 600 : 400, fontSize: 16, borderBottom: `1px solid ${c.border}` })}>
-                  {link.label}
-                </NavLink>
+              {navLinks.map((link, index) => (
+                <motion.div key={link.to} initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.08 + index * 0.04, duration: 0.3, ease: "easeOut" }} whileHover={{ x: 0, scale: 1.01 }}
+                  style={{ overflow: "hidden" }}>
+                  <NavLink to={link.to} style={({ isActive }) => ({ display: "block", textDecoration: "none", padding: "12px clamp(20px, 5vw, 60px)", color: isActive ? c.primary : c.text, fontWeight: isActive ? 600 : 400, fontSize: 16, borderBottom: `1px solid ${c.border}` })}>
+                    {link.label}
+                  </NavLink>
+                </motion.div>
               ))}
             </div>
           </motion.div>
@@ -469,9 +554,1078 @@ function SectionTitle({ title, subtitle, c, center = true }) {
 }
 
 /* ─────────────────────────────────────────
+   LIVE HERO BUTTON
+───────────────────────────────────────── */
+function LiveHeroButton({ onClick }) {
+  const particles = Array.from({ length: 8 }, (_, i) => i);
+  return (
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+      {/* Ambient particles */}
+      {particles.map((i) => (
+        <motion.div key={i}
+          animate={{ x: [0, (i % 2 === 0 ? 1 : -1) * (12 + i * 4), 0], y: [0, -(10 + i * 5), 0], opacity: [0, 0.8, 0], scale: [0.4, 1, 0.4] }}
+          transition={{ duration: 2.2 + i * 0.3, repeat: Infinity, delay: i * 0.28, ease: "easeInOut" }}
+          style={{ position: "absolute", left: `${10 + (i * 11) % 80}%`, top: "50%", width: 4 + (i % 3) * 2, height: 4 + (i % 3) * 2, borderRadius: "50%", background: ["#f0abfc","#fb7185","#fbbf24","#a78bfa","#34d399","#60a5fa","#f472b6","#818cf8"][i], pointerEvents: "none", zIndex: 1 }} />
+      ))}
+      <motion.button
+        onClick={onClick}
+        animate={{ boxShadow: ["0 0 20px rgba(168,85,247,0.4), 0 0 40px rgba(236,72,153,0.2)", "0 0 35px rgba(168,85,247,0.7), 0 0 60px rgba(236,72,153,0.4)", "0 0 20px rgba(168,85,247,0.4), 0 0 40px rgba(236,72,153,0.2)"] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+        whileHover={{ scale: 1.06, boxShadow: "0 0 60px rgba(168,85,247,0.8), 0 0 100px rgba(236,72,153,0.5)" }}
+        whileTap={{ scale: 0.96 }}
+        style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 10, background: "linear-gradient(135deg, rgba(88,28,135,0.85) 0%, rgba(157,23,77,0.85) 50%, rgba(194,65,12,0.75) 100%)", backdropFilter: "blur(16px)", border: "1px solid rgba(216,180,254,0.35)", borderRadius: 50, padding: "14px 32px", fontSize: 15, fontWeight: 700, fontFamily: "'Palatino Linotype', Georgia, serif", color: "#fff", cursor: "pointer", letterSpacing: 0.5, zIndex: 2, overflow: "hidden" }}>
+        {/* Shimmer sweep */}
+        <motion.div animate={{ x: ["-120%", "220%"] }} transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 1.5, ease: "easeInOut" }}
+          style={{ position: "absolute", inset: 0, background: "linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.22) 50%, transparent 65%)", pointerEvents: "none" }} />
+        {/* Live dot */}
+        <span style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+          <motion.span animate={{ scale: [1, 1.8, 1], opacity: [1, 0, 1] }} transition={{ duration: 1.6, repeat: Infinity }} style={{ position: "absolute", width: 14, height: 14, borderRadius: "50%", background: "rgba(239,68,68,0.4)" }} />
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", display: "block", position: "relative", boxShadow: "0 0 8px #ef4444" }} />
+        </span>
+        {/* Broadcast icon */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.5 12a19.79 19.79 0 0 1-3-8.6A2 2 0 0 1 3.56 1.5h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+        </svg>
+        Join Live Classes
+      </motion.button>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────
+   SVG REACTION ICONS
+───────────────────────────────────────── */
+const SVG_REACTIONS = [
+  { id: "heart", label: "Love", el: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+    </svg>
+  )},
+  { id: "lotus", label: "Peace", el: (
+    <svg width="22" height="22" viewBox="0 0 48 48" fill="currentColor">
+      <ellipse cx="24" cy="32" rx="10" ry="14" opacity="0.25"/>
+      <path d="M24 12 C18 12, 10 18, 10 28 C14 24, 19 22, 24 22 C29 22, 34 24, 38 28 C38 18, 30 12, 24 12Z"/>
+      <path d="M24 22 C20 16, 12 16, 10 24 C14 22, 19 23, 24 22Z"/>
+      <path d="M24 22 C28 16, 36 16, 38 24 C34 22, 29 23, 24 22Z"/>
+      <ellipse cx="24" cy="30" rx="4" ry="6"/>
+    </svg>
+  )},
+  { id: "om", label: "Namaste", el: (
+    <svg width="22" height="22" viewBox="0 0 48 48" fill="currentColor">
+      <text x="8" y="36" fontSize="30" fontFamily="serif">🕉</text>
+    </svg>
+  )},
+  { id: "fire", label: "Energy", el: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2c0 0-5 4-5 9a5 5 0 0 0 10 0c0-3-2-5-2-5s-1 2-2 2c0 0 1-3-1-6z"/>
+      <path d="M12 12c0 0-2 1.5-2 3a2 2 0 0 0 4 0c0-1.5-2-3-2-3z" opacity="0.6"/>
+    </svg>
+  )},
+  { id: "wave", label: "Flow", el: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <path d="M2 12 C4 8, 8 8, 10 12 C12 16, 16 16, 18 12 C20 8, 22 8, 22 12"/>
+    </svg>
+  )},
+];
+
+/* ─────────────────────────────────────────
+   FLOATING REACTION PARTICLE
+───────────────────────────────────────── */
+function FloatingReaction({ reaction, id, onDone }) {
+  const x = (Math.random() - 0.5) * 120;
+  const size = 18 + Math.random() * 22;
+  const COLORS = { heart: "#f43f5e", lotus: "#a78bfa", om: "#fbbf24", fire: "#f97316", wave: "#38bdf8" };
+  const color = COLORS[reaction.id] || "#fff";
+  return (
+    <motion.div key={id}
+      initial={{ opacity: 1, y: 0, x: 0, scale: 0.5 }}
+      animate={{ opacity: 0, y: -160, x, scale: 1.2 }}
+      transition={{ duration: 2.2, ease: "easeOut" }}
+      onAnimationComplete={onDone}
+      style={{ position: "absolute", bottom: 60, left: "50%", pointerEvents: "none", color, width: size, height: size, filter: `drop-shadow(0 0 6px ${color})` }}>
+      {reaction.el}
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────
+   ORB VIDEO — robust autoplay component
+───────────────────────────────────────── */
+const ORB_VIDEO_SOURCES = [
+  "https://assets.mixkit.co/videos/preview/mixkit-woman-meditating-in-a-room-with-candles-43640-large.mp4",
+  "https://assets.mixkit.co/videos/preview/mixkit-yoga-woman-doing-exercises-1487-large.mp4",
+  "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+  "https://assets.mixkit.co/videos/preview/mixkit-abstract-glowing-orbs-of-light-394-large.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
+];
+
+/* Animated canvas fallback — cinematic chakra/meditation orb shown when video fails */
+function OrbCanvasFallback() {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let frame = 0;
+    let raf;
+    const W = canvas.width = canvas.offsetWidth || 200;
+    const H = canvas.height = canvas.offsetHeight || 200;
+    const cx = W / 2, cy = H / 2;
+
+    const draw = () => {
+      frame++;
+      ctx.clearRect(0, 0, W, H);
+
+      // Deep cosmic background
+      const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.6);
+      bg.addColorStop(0, "rgba(88,28,135,0.95)");
+      bg.addColorStop(0.5, "rgba(30,10,60,0.98)");
+      bg.addColorStop(1, "rgba(2,8,17,1)");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // Rotating nebula rings
+      for (let r = 0; r < 3; r++) {
+        const rot = frame * 0.008 * (r % 2 === 0 ? 1 : -1) + r * Math.PI * 0.6;
+        const ringR = 55 + r * 22;
+        const grad = ctx.createConicalGradient ? null : null;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rot);
+        ctx.beginPath();
+        ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+        ctx.strokeStyle = `hsla(${270 + r * 30 + frame * 0.3}, 80%, 70%, ${0.12 + r * 0.04})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Floating energy particles
+      for (let i = 0; i < 18; i++) {
+        const angle = (i / 18) * Math.PI * 2 + frame * 0.012;
+        const radius = 40 + Math.sin(frame * 0.05 + i * 0.7) * 22;
+        const px = cx + Math.cos(angle) * radius;
+        const py = cy + Math.sin(angle) * radius;
+        const alpha = 0.4 + 0.5 * Math.sin(frame * 0.08 + i * 0.9);
+        const hue = 270 + i * 15 + frame * 0.5;
+        ctx.beginPath();
+        ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${hue}, 90%, 75%, ${alpha})`;
+        ctx.fill();
+      }
+
+      // Inner glow core
+      const coreGrad = ctx.createRadialGradient(cx - 8, cy - 8, 2, cx, cy, 38);
+      coreGrad.addColorStop(0, `hsla(${280 + Math.sin(frame * 0.04) * 20}, 90%, 90%, 0.95)`);
+      coreGrad.addColorStop(0.4, `hsla(${260 + Math.cos(frame * 0.03) * 15}, 85%, 65%, 0.75)`);
+      coreGrad.addColorStop(1, "rgba(139,92,246,0)");
+      ctx.beginPath();
+      ctx.arc(cx, cy, 38, 0, Math.PI * 2);
+      ctx.fillStyle = coreGrad;
+      ctx.fill();
+
+      // Pulsing mandala petals
+      const petals = 8;
+      const pulse = 0.85 + 0.15 * Math.sin(frame * 0.045);
+      for (let p = 0; p < petals; p++) {
+        const a = (p / petals) * Math.PI * 2 + frame * 0.01;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(a);
+        ctx.beginPath();
+        ctx.ellipse(0, -24 * pulse, 5, 14 * pulse, 0, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${290 + p * 8}, 80%, 72%, 0.22)`;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Om symbol shine
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.font = `bold ${22 + Math.sin(frame * 0.04) * 2}px serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const shimmer = `rgba(255,220,255,${0.7 + 0.3 * Math.sin(frame * 0.06)})`;
+      ctx.shadowColor = "rgba(216,180,254,0.9)";
+      ctx.shadowBlur = 12 + Math.sin(frame * 0.05) * 5;
+      ctx.fillStyle = shimmer;
+      ctx.fillText("🕉", 0, 1);
+      ctx.restore();
+
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", borderRadius: "50%", zIndex: 0 }} />
+  );
+}
+
+function OrbVideo() {
+  const vidRef = useRef(null);
+  const [srcIdx, setSrcIdx] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+
+  useEffect(() => {
+    const vid = vidRef.current;
+    if (!vid) return;
+    vid.muted = true;
+    vid.playsInline = true;
+    setVideoLoaded(false);
+    const p = vid.play();
+    if (p && p.catch) {
+      p.catch(() => {
+        const retry = () => { vid.play().catch(() => {}); document.removeEventListener("click", retry); };
+        document.addEventListener("click", retry, { once: true });
+      });
+    }
+  }, [srcIdx]);
+
+  return (
+    <>
+      {/* Always show canvas fallback underneath */}
+      <OrbCanvasFallback />
+      {/* Video on top when available */}
+      {!failed && (
+        <video
+          ref={vidRef}
+          key={srcIdx}
+          autoPlay
+          muted
+          loop
+          playsInline
+          crossOrigin="anonymous"
+          onCanPlay={() => setVideoLoaded(true)}
+          onError={() => {
+            if (srcIdx < ORB_VIDEO_SOURCES.length - 1) setSrcIdx((i) => i + 1);
+            else setFailed(true);
+          }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            opacity: videoLoaded ? 0.88 : 0,
+            transition: "opacity 0.8s ease",
+            display: "block",
+            willChange: "transform",
+            zIndex: 1,
+          }}
+        >
+          <source src={ORB_VIDEO_SOURCES[srcIdx]} type="video/mp4" />
+        </video>
+      )}
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────
+   BREATHING ORB
+───────────────────────────────────────── */
+function BreathingOrb() {
+  const phases = ["Inhale", "Hold", "Exhale", "Hold"];
+  const durations = [4, 2, 6, 2];
+  const [phase, setPhase] = useState(0);
+  const totalCycle = durations.reduce((a, b) => a + b, 0);
+
+  useEffect(() => {
+    let elapsed = 0;
+    const timers = phases.map((_, i) => {
+      const t = setTimeout(() => setPhase(i), elapsed * 1000);
+      elapsed += durations[i];
+      return t;
+    });
+    const loop = setInterval(() => {
+      elapsed = 0;
+      phases.forEach((_, i) => {
+        setTimeout(() => setPhase(i), elapsed * 1000);
+        elapsed += durations[i];
+      });
+    }, totalCycle * 1000);
+    return () => { timers.forEach(clearTimeout); clearInterval(loop); };
+  }, []);
+
+  const isExpand = phase === 0;
+  const isHold = phase === 1 || phase === 3;
+  const scaleVal = isExpand ? 1 : isHold ? (phase === 1 ? 1 : 0.7) : 0.7;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      <div style={{ position: "relative", width: 140, height: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {/* Outer glow rings */}
+        {[1.6, 1.3, 1].map((scale, i) => (
+          <motion.div key={i} animate={{ scale: isExpand ? scale : scale * 0.65, opacity: isExpand ? 0.15 - i * 0.04 : 0.05 }} transition={{ duration: durations[phase], ease: "easeInOut" }}
+            style={{ position: "absolute", width: 90, height: 90, borderRadius: "50%", border: `1px solid rgba(168,85,247,${0.4 - i * 0.1})`, background: "transparent" }} />
+        ))}
+
+        {/* Soft neon aura spinning ring */}
+        <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+          style={{ position: "absolute", width: 98, height: 98, borderRadius: "50%", background: "conic-gradient(from 0deg, transparent 60%, rgba(168,85,247,0.5) 75%, rgba(219,39,119,0.4) 88%, transparent 100%)", pointerEvents: "none" }} />
+
+        {/* Main orb with cinematic video inside */}
+        <motion.div animate={{ scale: isExpand ? 1 : 0.7 }} transition={{ duration: durations[phase], ease: "easeInOut" }}
+          style={{ width: 90, height: 90, borderRadius: "50%", background: "radial-gradient(circle at 35% 35%, rgba(216,180,254,0.9) 0%, rgba(139,92,246,0.7) 40%, rgba(88,28,135,0.9) 100%)", animation: "orbGlowPulse 4s ease-in-out infinite", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", flexShrink: 0 }}>
+
+          {/* Cinematic meditation video */}
+          <OrbVideo />
+
+          {/* Vignette overlay to blend video into orb */}
+          <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "radial-gradient(circle, rgba(88,28,135,0.18) 0%, rgba(88,28,135,0.62) 75%, rgba(88,28,135,0.92) 100%)", pointerEvents: "none", zIndex: 10 }} />
+          {/* Om symbol on top */}
+          <span style={{ position: "relative", fontSize: 22, zIndex: 11, filter: "drop-shadow(0 0 6px rgba(216,180,254,0.9))" }}>🕉️</span>
+        </motion.div>
+
+        {/* Breathing pulse wave overlay */}
+        <motion.div animate={{ scale: isExpand ? 1.18 : 0.85, opacity: isExpand ? 0.22 : 0.04 }} transition={{ duration: durations[phase], ease: "easeInOut" }}
+          style={{ position: "absolute", width: 90, height: 90, borderRadius: "50%", background: "radial-gradient(circle, rgba(168,85,247,0.5), transparent 70%)", pointerEvents: "none" }} />
+      </div>
+      <motion.div key={phase} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+        style={{ fontSize: 13, fontWeight: 700, letterSpacing: 3, textTransform: "uppercase", color: ["rgba(167,139,250,1)", "rgba(251,191,36,1)", "rgba(52,211,153,1)", "rgba(251,191,36,1)"][phase] }}>
+        {phases[phase]}
+      </motion.div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────
+   SESSION PROGRESS RING
+───────────────────────────────────────── */
+function SessionProgressRing({ progress }) {
+  const r = 36; const circ = 2 * Math.PI * r;
+  const segments = [
+    { label: "Warmup", color: "#f472b6", pct: 0.15 },
+    { label: "Flow", color: "#a78bfa", pct: 0.45 },
+    { label: "Meditation", color: "#34d399", pct: 0.25 },
+    { label: "Cooldown", color: "#60a5fa", pct: 0.15 },
+  ];
+  const currentSeg = (() => {
+    let acc = 0;
+    for (const s of segments) { acc += s.pct; if (progress <= acc) return s; }
+    return segments[segments.length - 1];
+  })();
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+      <div style={{ position: "relative", width: 90, height: 90 }}>
+        <svg width="90" height="90" viewBox="0 0 90 90">
+          <circle cx="45" cy="45" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="7" />
+          <motion.circle cx="45" cy="45" r={r} fill="none" stroke={currentSeg.color} strokeWidth="7" strokeLinecap="round"
+            strokeDasharray={circ} animate={{ strokeDashoffset: circ * (1 - progress) }} transition={{ duration: 1.2, ease: "easeInOut" }}
+            transform="rotate(-90 45 45)" style={{ filter: `drop-shadow(0 0 6px ${currentSeg.color})` }} />
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: currentSeg.color }}>{Math.round(progress * 100)}%</div>
+        </div>
+      </div>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: currentSeg.color }}>{currentSeg.label}</div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────
+   CHAKRA PANEL
+───────────────────────────────────────── */
+function ChakraPanel() {
+  const chakras = [
+    { name: "Sahasrara", color: "#c084fc", symbol: "◉" },
+    { name: "Ajna", color: "#818cf8", symbol: "◈" },
+    { name: "Vishuddha", color: "#67e8f9", symbol: "◇" },
+    { name: "Anahata", color: "#4ade80", symbol: "◆" },
+    { name: "Manipura", color: "#fde047", symbol: "▲" },
+    { name: "Svadhisthana", color: "#fb923c", symbol: "◑" },
+    { name: "Muladhara", color: "#f87171", symbol: "■" },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {chakras.map((ch, i) => (
+        <motion.div key={ch.name} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
+          style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] }} transition={{ duration: 2 + i * 0.4, repeat: Infinity, ease: "easeInOut" }}
+            style={{ width: 18, height: 18, borderRadius: "50%", background: ch.color, boxShadow: `0 0 8px ${ch.color}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, color: "#000", flexShrink: 0 }}>
+            {ch.symbol}
+          </motion.div>
+          <div style={{ flex: 1, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+            <motion.div animate={{ width: [`${40 + i * 8}%`, `${60 + i * 5}%`, `${40 + i * 8}%`] }} transition={{ duration: 3 + i * 0.5, repeat: Infinity, ease: "easeInOut" }}
+              style={{ height: "100%", background: ch.color, borderRadius: 2, boxShadow: `0 0 4px ${ch.color}` }} />
+          </div>
+          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", minWidth: 56, textAlign: "right", letterSpacing: 0.5 }}>{ch.name}</span>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────
+   LIVE CLASS MODAL — FULLSCREEN IMMERSIVE
+───────────────────────────────────────── */
+const LIVE_QUOTES = [
+  "Your breath is your power.",
+  "Stillness creates clarity.",
+  "Be present in this moment.",
+  "Let go of what no longer serves you.",
+  "You are stronger than you know.",
+  "Every breath is a new beginning.",
+];
+
+const LIVE_CHAT_MSGS = [
+  { user: "Priya N.", msg: "This is so calming 🙏", t: 0 },
+  { user: "Arjun M.", msg: "Feeling the energy!", t: 3 },
+  { user: "Kavitha R.", msg: "Namaste everyone 🌿", t: 7 },
+  { user: "Rajan P.", msg: "Incredible session today", t: 12 },
+  { user: "Divya K.", msg: "My chakras are aligning ✨", t: 18 },
+  { user: "Siddharth R.", msg: "This breathing phase 🔥", t: 24 },
+  { user: "Meena T.", msg: "Been doing this for 30 days straight!", t: 30 },
+  { user: "Vikram S.", msg: "That lotus pose 😍", t: 36 },
+];
+
+function LiveClassModal({ onClose }) {
+  const [reactions, setReactions] = useState([]);
+  const [reactionId, setReactionId] = useState(0);
+  const [energy, setEnergy] = useState(67);
+  const [muted, setMuted] = useState(false);
+  const [camOff, setCamOff] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [ambient, setAmbient] = useState("rain");
+  const [ambientVol, setAmbientVol] = useState(60);
+  const [chatMsgs, setChatMsgs] = useState(LIVE_CHAT_MSGS.slice(0, 2).map((m) => ({ ...m, uid: Math.random(), ts: new Date() })));
+  const [chatInput, setChatInput] = useState("");
+  const [quoteIdx, setQuoteIdx] = useState(0);
+  const [sessionSecs, setSessionSecs] = useState(0);
+  const [viewers, setViewers] = useState(1247);
+  const [progress, setProgress] = useState(0.28);
+  const [streak] = useState(7);
+  const [showAchievement, setShowAchievement] = useState(true);
+  const [livePlaying, setLivePlaying] = useState(true);
+  const [liveTime, setLiveTime] = useState(0);
+  const [liveDuration, setLiveDuration] = useState(0);
+  const liveVideoRef = useRef(null);
+  const chatRef = useRef(null);
+
+  // Session timer
+  useEffect(() => {
+    const t = setInterval(() => {
+      setSessionSecs((s) => s + 1);
+      setProgress((p) => Math.min(p + 0.0003, 1));
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Viewer fluctuation
+  useEffect(() => {
+    const t = setInterval(() => setViewers((v) => v + Math.floor((Math.random() - 0.3) * 5)), 4000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Quote rotation
+  useEffect(() => {
+    const t = setInterval(() => setQuoteIdx((i) => (i + 1) % LIVE_QUOTES.length), 6000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Chat drip — periodic bot messages
+  useEffect(() => {
+    const t = setInterval(() => {
+      const BOT_MSGS = [
+        "My breathing feels lighter ✨",
+        "This meditation is calming 🌌",
+        "My chakras feel aligned",
+        "Energy feels amazing today 🔥",
+        "Namaste everyone 🙏",
+        "So peaceful here 🌿",
+        "Incredible session!",
+        "That lotus flow was beautiful 😍",
+      ];
+      const BOT_USERS = ["Priya N.", "Arjun M.", "Kavitha R.", "Rajan P.", "Meena T.", "Vikram S.", "Divya K."];
+      const user = BOT_USERS[Math.floor(Math.random() * BOT_USERS.length)];
+      const msg = BOT_MSGS[Math.floor(Math.random() * BOT_MSGS.length)];
+      setChatMsgs((prev) => {
+        const updated = [...prev, { user, msg, uid: Date.now() + Math.random(), ts: new Date(), isBot: true }];
+        return updated.slice(-20);
+      });
+      setTimeout(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 60);
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Send user chat message
+  const sendChatMsg = () => {
+    const text = chatInput.trim();
+    if (!text) return;
+    const newMsg = { user: "You", msg: text, uid: Date.now() + Math.random(), ts: new Date(), isOwn: true };
+    setChatMsgs((prev) => [...prev, newMsg].slice(-20));
+    setChatInput("");
+    setEnergy((e) => Math.min(e + 1, 100));
+    setTimeout(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 60);
+  };
+
+  const handleChatKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMsg(); }
+  };
+
+  // Auto-dismiss achievement
+  useEffect(() => {
+    const t = setTimeout(() => setShowAchievement(false), 5000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const addReaction = (r) => {
+    const id = reactionId + 1;
+    setReactionId(id);
+    setReactions((prev) => [...prev, { ...r, uid: id }]);
+    setEnergy((e) => Math.min(e + 3, 100));
+  };
+
+  const fmtTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+  const ambients = [
+    { id: "rain", label: "Rain", icon: "🌧" },
+    { id: "ocean", label: "Ocean", icon: "🌊" },
+    { id: "bowls", label: "Tibetan Bowls", icon: "🔔" },
+    { id: "forest", label: "Forest", icon: "🌲" },
+    { id: "freq", label: "432Hz", icon: "🎵" },
+  ];
+
+  const achievements = [
+    { icon: "⭐", title: "First Live Session", desc: "Welcome to the community!" },
+    { icon: "🔥", title: "7 Day Streak", desc: `${streak} days of mindfulness` },
+    { icon: "🧘", title: "Meditation Master", desc: "30+ sessions completed" },
+    { icon: "⏱", title: "30 Min Completed", desc: "Deep practice unlocked" },
+  ];
+
+  useEffect(() => {
+    const video = liveVideoRef.current;
+    if (!video) return;
+
+    const handleLoaded = () => setLiveDuration(video.duration || 0);
+    const handleTimeUpdate = () => setLiveTime(video.currentTime || 0);
+
+    video.addEventListener("loadedmetadata", handleLoaded);
+    video.addEventListener("timeupdate", handleTimeUpdate);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", handleLoaded);
+      video.removeEventListener("timeupdate", handleTimeUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    const video = liveVideoRef.current;
+    if (!video) return;
+    if (livePlaying) {
+      const playPromise = video.play();
+      if (playPromise && playPromise.catch) playPromise.catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [livePlaying]);
+
+  const formatTime = (secs) => {
+    const minutes = Math.floor(secs / 60).toString().padStart(2, "0");
+    const seconds = Math.floor(secs % 60).toString().padStart(2, "0");
+    return `${minutes}:${seconds}`;
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}
+      style={{ position: "fixed", inset: 0, zIndex: 2000, background: "#020811", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+      {/* ── TOP BAR ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", background: "rgba(2,8,17,0.9)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, zIndex: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <motion.div animate={{ scale: [1, 1.5, 1], opacity: [1, 0.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
+            style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 10px #ef4444" }} />
+          <span style={{ color: "#ef4444", fontSize: 11, fontWeight: 800, letterSpacing: 2 }}>LIVE</span>
+        </div>
+        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)" }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ color: "#fff", fontSize: 14, fontWeight: 700, fontFamily: "'Georgia', serif", fontStyle: "italic" }}>Morning Flow & Breathwork with Anjali Sharma</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.5)", fontSize: 12 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span style={{ color: "#fff", fontWeight: 700 }}>{viewers.toLocaleString()}</span>
+        </div>
+        <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 13 }}>⏱ {fmtTime(sessionSecs)}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "rgba(255,255,255,0.45)", fontSize: 12 }}>
+          <span>Video {formatTime(liveTime)} / {formatTime(liveDuration || 0)}</span>
+          <motion.button onClick={() => setLivePlaying(true)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}
+            style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "6px 10px", color: "#fff", fontSize: 12, cursor: "pointer" }}>
+            Play
+          </motion.button>
+          <motion.button onClick={() => setLivePlaying(false)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}
+            style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "6px 10px", color: "#fff", fontSize: 12, cursor: "pointer" }}>
+            Stop
+          </motion.button>
+        </div>
+        <motion.button onClick={onClose} whileHover={{ scale: 1.1, background: "rgba(239,68,68,0.2)" }} whileTap={{ scale: 0.95 }}
+          style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "6px 14px", color: "#fff", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 16 }}>✕</span> Leave
+        </motion.button>
+      </div>
+
+      {/* ── MAIN BODY ── */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+
+        {/* ── LEFT PANEL (hidden in focus mode) ── */}
+        <AnimatePresence>
+          {!focusMode && (
+            <motion.div initial={{ x: -280, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -280, opacity: 0 }} transition={{ duration: 0.3 }}
+              style={{ width: 280, background: "rgba(5,10,24,0.95)", backdropFilter: "blur(24px)", borderRight: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", overflow: "hidden", flexShrink: 0 }}>
+
+              {/* Instructor card */}
+              <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ position: "relative" }}>
+                    <img src="https://images.unsplash.com/photo-1594381898411-846e7d193883?w=100&q=80" alt="Anjali" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(139,92,246,0.6)" }} />
+                    <div style={{ position: "absolute", bottom: 1, right: 1, width: 12, height: 12, borderRadius: "50%", background: "#22c55e", border: "2px solid #020811" }} />
+                  </div>
+                  <div>
+                    <div style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>Anjali Sharma</div>
+                    <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 11 }}>Senior Instructor</div>
+                    <div style={{ display: "inline-block", background: "rgba(239,68,68,0.2)", color: "#fca5a5", borderRadius: 4, padding: "1px 7px", fontSize: 10, fontWeight: 700, letterSpacing: 1, marginTop: 3 }}>LIVE</div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {["Hatha", "Breathwork", "Meditation"].map((tag) => (
+                    <span key={tag} style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa", borderRadius: 20, padding: "2px 10px", fontSize: 10, fontWeight: 600 }}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Breathing orb */}
+              <div style={{ padding: "20px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, letterSpacing: 2, textTransform: "uppercase", marginBottom: 14 }}>Breathing Guide</div>
+                <BreathingOrb />
+              </div>
+
+              {/* Session ring + chakras */}
+              <div style={{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 16, alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>Session</div>
+                  <SessionProgressRing progress={progress} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>Chakras</div>
+                  <ChakraPanel />
+                </div>
+              </div>
+
+              {/* Streak & scores */}
+              <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  {[{ label: "Streak", val: `${streak}d`, icon: "🔥" }, { label: "Mindfulness", val: "92", icon: "🧠" }, { label: "Consistency", val: "85%", icon: "📊" }].map((s) => (
+                    <div key={s.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 6px", textAlign: "center", border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div style={{ fontSize: 18 }}>{s.icon}</div>
+                      <div style={{ color: "#fff", fontSize: 15, fontWeight: 800, marginTop: 2 }}>{s.val}</div>
+                      <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 9, letterSpacing: 0.5 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ambient sounds */}
+              <div style={{ padding: "14px 16px", flex: 1 }}>
+                <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>Ambient Sound</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                  {ambients.map((a) => (
+                    <motion.button key={a.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setAmbient(a.id)}
+                      style={{ display: "flex", alignItems: "center", gap: 5, background: ambient === a.id ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.04)", border: `1px solid ${ambient === a.id ? "rgba(139,92,246,0.6)" : "rgba(255,255,255,0.06)"}`, borderRadius: 20, padding: "5px 11px", fontSize: 11, color: ambient === a.id ? "#c4b5fd" : "rgba(255,255,255,0.5)", cursor: "pointer" }}>
+                      <span>{a.icon}</span>{a.label}
+                    </motion.button>
+                  ))}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>Vol</span>
+                  <div style={{ flex: 1, position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2, cursor: "pointer" }}
+                    onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAmbientVol(Math.round(((e.clientX - r.left) / r.width) * 100)); }}>
+                    <motion.div style={{ width: `${ambientVol}%`, height: "100%", background: "linear-gradient(90deg, #7c3aed, #db2777)", borderRadius: 2, boxShadow: "0 0 6px rgba(139,92,246,0.6)" }} />
+                    <motion.div style={{ position: "absolute", top: "50%", left: `${ambientVol}%`, width: 12, height: 12, borderRadius: "50%", background: "#c4b5fd", transform: "translate(-50%, -50%)", boxShadow: "0 0 8px rgba(196,181,253,0.8)" }} />
+                  </div>
+                  <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, minWidth: 24 }}>{ambientVol}%</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── CENTER: VIDEO + CONTROLS ── */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+
+          {/* Cinematic video area */}
+          <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+            {/* ── FULL PANEL BACKGROUND VIDEO ── */}
+            <div style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden" }}>
+              {/* The actual yoga/meditation background video */}
+              <video
+                ref={liveVideoRef}
+                autoPlay muted loop playsInline preload="auto"
+                style={{
+                  position: "absolute", inset: 0,
+                  width: "100%", height: "100%",
+                  objectFit: "cover",
+                  opacity: 0.45,
+                  filter: "brightness(0.7) saturate(1.2)",
+                  transform: "scale(1.05)",
+                  transition: "opacity 1.5s ease",
+                }}
+              >
+                <source src="/videos/yoga-bg.mp4" type="video/mp4" />
+              </video>
+              {/* Dark cinematic overlay */}
+              <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} />
+              {/* Purple spiritual radial glow */}
+              <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at center, rgba(139,92,246,0.22), transparent 70%)" }} />
+              {/* Top vignette */}
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 80, background: "linear-gradient(to bottom, rgba(2,8,17,0.85), transparent)" }} />
+              {/* Bottom vignette */}
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 100, background: "linear-gradient(to top, rgba(2,8,17,0.9), transparent)" }} />
+              {/* Side vigettes for depth */}
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 80, background: "linear-gradient(to right, rgba(2,8,17,0.6), transparent)" }} />
+              <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: 80, background: "linear-gradient(to left, rgba(2,8,17,0.6), transparent)" }} />
+            </div>
+
+            {/* Ambient gradient bg — sits above video for color mood */}
+            <div style={{ position: "absolute", inset: 0, zIndex: 1, background: "linear-gradient(135deg, rgba(5,14,26,0.5) 0%, rgba(13,27,42,0.4) 40%, rgba(26,5,51,0.45) 100%)", pointerEvents: "none" }} />
+            {/* Moving ambient lights */}
+            {[
+              { x: "15%", y: "20%", c1: "#7c3aed", c2: "transparent", s: 500 },
+              { x: "75%", y: "60%", c1: "#db2777", c2: "transparent", s: 400 },
+              { x: "45%", y: "85%", c1: "#0e7490", c2: "transparent", s: 350 },
+            ].map((orb, i) => (
+              <motion.div key={i} animate={{ x: [0, 30, -20, 0], y: [0, -25, 15, 0], opacity: [0.25, 0.45, 0.25] }} transition={{ duration: 8 + i * 2, repeat: Infinity, ease: "easeInOut", delay: i * 1.5 }}
+                style={{ position: "absolute", zIndex: 1, left: orb.x, top: orb.y, width: orb.s, height: orb.s, borderRadius: "50%", background: `radial-gradient(circle, ${orb.c1}40, ${orb.c2})`, pointerEvents: "none" }} />
+            ))}
+            {/* Fog layer */}
+            <motion.div animate={{ opacity: [0.12, 0.22, 0.12], x: [0, 40, 0] }} transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+              style={{ position: "absolute", inset: 0, zIndex: 1, background: "radial-gradient(ellipse 120% 60% at 50% 100%, rgba(139,92,246,0.15), transparent)", pointerEvents: "none" }} />
+
+            {/* ── CINEMATIC LIVE ORB ── */}
+            <div style={{ position: "absolute", inset: 0, zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+
+                {/* Radial pulse waves */}
+                {[1, 1.4, 1.8].map((scale, i) => (
+                  <div key={i} style={{ position: "absolute", width: 220, height: 220, borderRadius: "50%", border: "1px solid rgba(139,92,246,0.3)", animation: `liveRadialPulse ${3 + i * 0.7}s ease-out ${i * 0.9}s infinite`, pointerEvents: "none" }} />
+                ))}
+
+                {/* Outer rotating neon ring */}
+                <div style={{ position: "absolute", width: 216, height: 216, borderRadius: "50%", animation: "liveRingRotate 8s linear infinite", background: "conic-gradient(from 0deg, #7c3aed, #ec4899, #f97316, #7c3aed)", padding: 2, boxSizing: "border-box", flexShrink: 0 }}>
+                  <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: "#020811" }} />
+                </div>
+
+                {/* Soft aura glow */}
+                <motion.div animate={{ opacity: [0.5, 0.85, 0.5], scale: [1, 1.06, 1] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  style={{ position: "absolute", width: 240, height: 240, borderRadius: "50%", background: "radial-gradient(circle, rgba(139,92,246,0.35) 0%, rgba(219,39,119,0.18) 50%, transparent 75%)", pointerEvents: "none" }} />
+
+                {/* Video circle */}
+                <div style={{ position: "relative", width: 200, height: 200, borderRadius: "50%", overflow: "hidden", flexShrink: 0, zIndex: 2, boxShadow: "0 0 40px rgba(139,92,246,0.5), 0 0 80px rgba(219,39,119,0.2)" }}>
+                  <OrbVideo />
+                  {/* Soft vignette/blur edge overlay */}
+                  <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "radial-gradient(circle, transparent 55%, rgba(2,8,17,0.85) 100%)", pointerEvents: "none", zIndex: 10 }} />
+                  {/* Subtle color tint overlay */}
+                  <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(88,28,135,0.12)", pointerEvents: "none", mixBlendMode: "overlay", zIndex: 11 }} />
+                </div>
+
+                {/* LIVE STREAM ACTIVE label */}
+                <motion.div animate={{ opacity: [0.55, 1, 0.55] }} transition={{ duration: 3, repeat: Infinity }}
+                  style={{ position: "absolute", bottom: -36, left: "50%", transform: "translateX(-50%)", color: "rgba(255,255,255,0.5)", fontSize: 11, letterSpacing: 3, textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                  LIVE STREAM ACTIVE
+                </motion.div>
+              </div>
+            </div>
+
+            {/* Floating quote */}
+            <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", width: "80%", textAlign: "center", pointerEvents: "none", zIndex: 2 }}>
+              <AnimatePresence mode="wait">
+                <motion.div key={quoteIdx} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.6 }}
+                  style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(12px)", borderRadius: 20, padding: "10px 24px", border: "1px solid rgba(255,255,255,0.08)", display: "inline-block" }}>
+                  <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 13, fontStyle: "italic", fontFamily: "'Georgia', serif" }}>"{LIVE_QUOTES[quoteIdx]}"</span>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Floating reactions container */}
+            <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden", zIndex: 2 }}>
+              <AnimatePresence>
+                {reactions.map((r) => (
+                  <FloatingReaction key={r.uid} reaction={r} id={r.uid} onDone={() => setReactions((prev) => prev.filter((x) => x.uid !== r.uid))} />
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* ── CONTROLS BAR ── */}
+          <div style={{ background: "rgba(2,8,17,0.95)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.06)", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            {/* Community energy */}
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, letterSpacing: 1 }}>COMMUNITY ENERGY</span>
+                <span style={{ color: "#a78bfa", fontSize: 11, fontWeight: 700 }}>{energy}%</span>
+              </div>
+              <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                <motion.div animate={{ width: `${energy}%` }} transition={{ duration: 0.6, ease: "easeOut" }}
+                  style={{ height: "100%", background: "linear-gradient(90deg, #7c3aed, #ec4899, #f97316)", borderRadius: 2, boxShadow: "0 0 8px rgba(139,92,246,0.5)" }} />
+              </div>
+            </div>
+
+            {/* Reactions */}
+            <div style={{ display: "flex", gap: 6 }}>
+              {SVG_REACTIONS.map((r) => (
+                <motion.button key={r.id} whileHover={{ scale: 1.25, y: -4 }} whileTap={{ scale: 0.9 }} onClick={() => addReaction(r)}
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "7px 9px", cursor: "pointer", color: { heart: "#f43f5e", lotus: "#a78bfa", om: "#fbbf24", fire: "#f97316", wave: "#38bdf8" }[r.id], display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {r.el}
+                </motion.button>
+              ))}
+            </div>
+
+            {/* Control buttons */}
+            <div style={{ display: "flex", gap: 8 }}>
+              {[
+                { icon: muted ? "🔇" : "🎙️", label: muted ? "Unmute" : "Mute", action: () => setMuted(!muted), active: muted },
+                { icon: camOff ? "📵" : "📷", label: camOff ? "Cam On" : "Cam Off", action: () => setCamOff(!camOff), active: camOff },
+                { icon: focusMode ? "⊠" : "⊞", label: focusMode ? "Exit Focus" : "Focus Mode", action: () => setFocusMode(!focusMode), active: focusMode },
+              ].map((btn) => (
+                <motion.button key={btn.label} whileHover={{ scale: 1.08, background: "rgba(139,92,246,0.2)" }} whileTap={{ scale: 0.93 }} onClick={btn.action}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: btn.active ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.04)", border: `1px solid ${btn.active ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`, borderRadius: 10, padding: "7px 12px", cursor: "pointer", color: btn.active ? "#c4b5fd" : "rgba(255,255,255,0.5)", fontSize: 18, minWidth: 52 }}>
+                  {btn.icon}
+                  <span style={{ fontSize: 8, letterSpacing: 0.5 }}>{btn.label}</span>
+                </motion.button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT PANEL: CHAT (hidden in focus mode) ── */}
+        <AnimatePresence>
+          {!focusMode && (
+            <motion.div initial={{ x: 280, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 280, opacity: 0 }} transition={{ duration: 0.3 }}
+              style={{ width: 280, background: "rgba(5,10,24,0.95)", backdropFilter: "blur(24px)", borderLeft: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", overflow: "hidden", flexShrink: 0 }}>
+
+              {/* Chat header */}
+              <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, letterSpacing: 2, textTransform: "uppercase" }}>Live Chat</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <motion.div animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }} style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e" }} />
+                  <span style={{ color: "#22c55e", fontSize: 10 }}>{viewers.toLocaleString()} watching</span>
+                </div>
+              </div>
+
+              {/* Messages */}
+              <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+                <AnimatePresence initial={false}>
+                  {chatMsgs.map((msg) => (
+                    <motion.div key={msg.uid} initial={{ opacity: 0, y: 10, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.25, ease: "easeOut" }}
+                      style={{ display: "flex", gap: 8, alignItems: "flex-start", flexDirection: msg.isOwn ? "row-reverse" : "row" }}>
+                      {!msg.isOwn && (
+                        <div style={{ width: 26, height: 26, borderRadius: "50%", background: `hsl(${(msg.user.charCodeAt(0) * 37) % 360}, 50%, 38%)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 700, flexShrink: 0 }}>
+                          {msg.user[0]}
+                        </div>
+                      )}
+                      <div style={{ maxWidth: "78%", textAlign: msg.isOwn ? "right" : "left" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: msg.isOwn ? "flex-end" : "flex-start" }}>
+                          <span style={{ color: msg.isOwn ? "#34d399" : "rgba(139,92,246,0.9)", fontSize: 10, fontWeight: 700 }}>{msg.user}</span>
+                          <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 9 }}>
+                            {msg.ts ? `${msg.ts.getHours().toString().padStart(2,"0")}:${msg.ts.getMinutes().toString().padStart(2,"0")}` : ""}
+                          </span>
+                        </div>
+                        <div style={{ background: msg.isOwn ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.05)", border: `1px solid ${msg.isOwn ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.07)"}`, borderRadius: msg.isOwn ? "14px 14px 4px 14px" : "14px 14px 14px 4px", padding: "6px 10px", marginTop: 2 }}>
+                          <div style={{ color: msg.isOwn ? "rgba(167,243,208,0.95)" : "rgba(255,255,255,0.75)", fontSize: 12, lineHeight: 1.5 }}>{msg.msg}</div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {/* Chat input */}
+              <div style={{ padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(255,255,255,0.05)", borderRadius: 20, padding: "8px 8px 8px 14px", border: "1px solid rgba(255,255,255,0.1)", transition: "border-color 0.2s" }}
+                  onFocus={() => {}} onBlur={() => {}}>
+                  <input
+                    placeholder="Send a message…"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={handleChatKey}
+                    style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 12, fontFamily: "'Palatino Linotype', Georgia, serif" }}
+                  />
+                  <motion.button
+                    whileHover={{ scale: 1.15, background: "rgba(139,92,246,0.4)" }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={sendChatMsg}
+                    style={{ background: chatInput.trim() ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.04)", border: `1px solid ${chatInput.trim() ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`, borderRadius: "50%", width: 30, height: 30, cursor: "pointer", color: chatInput.trim() ? "#c4b5fd" : "rgba(255,255,255,0.25)", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s" }}>
+                    ↑
+                  </motion.button>
+                </div>
+                <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, marginTop: 5, paddingLeft: 4 }}>Press Enter to send</div>
+              </div>
+
+              {/* Achievements panel */}
+              <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>Achievements</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {achievements.map((ach, i) => (
+                    <motion.div key={ach.title} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }}
+                      whileHover={{ scale: 1.04, borderColor: "rgba(139,92,246,0.5)" }}
+                      style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "8px 10px", border: "1px solid rgba(255,255,255,0.07)", textAlign: "center" }}>
+                      <div style={{ fontSize: 20 }}>{ach.icon}</div>
+                      <div style={{ color: "#fff", fontSize: 9, fontWeight: 700, marginTop: 3, lineHeight: 1.3 }}>{ach.title}</div>
+                      <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 8, marginTop: 2 }}>{ach.desc}</div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* ── ACHIEVEMENT TOAST ── */}
+      <AnimatePresence>
+        {showAchievement && (
+          <motion.div initial={{ opacity: 0, y: 80, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 80, scale: 0.8 }} transition={{ type: "spring", damping: 18, stiffness: 280 }}
+            style={{ position: "absolute", bottom: 100, left: "50%", transform: "translateX(-50%)", background: "linear-gradient(135deg, rgba(124,58,237,0.9), rgba(219,39,119,0.9))", backdropFilter: "blur(20px)", borderRadius: 16, padding: "14px 24px", border: "1px solid rgba(216,180,254,0.3)", boxShadow: "0 20px 60px rgba(0,0,0,0.6)", display: "flex", alignItems: "center", gap: 12, zIndex: 20, whiteSpace: "nowrap" }}>
+            <motion.span animate={{ rotate: [0, 15, -15, 0] }} transition={{ duration: 0.6, delay: 0.3 }} style={{ fontSize: 28 }}>⭐</motion.span>
+            <div>
+              <div style={{ color: "#fff", fontWeight: 800, fontSize: 13 }}>Achievement Unlocked!</div>
+              <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 11 }}>First Live Session — Welcome to the community!</div>
+            </div>
+            <motion.button whileHover={{ scale: 1.1 }} onClick={() => setShowAchievement(false)} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 6, color: "#fff", cursor: "pointer", padding: "2px 8px", fontSize: 12 }}>✕</motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────
+   NOTIFICATION SYSTEM
+───────────────────────────────────────── */
+const NOTIF_DATA = [
+  { id: 1, icon: "🧘", msg: "Ananya Sharma started a live class", sub: "Morning Flow • 847 watching", delay: 3000 },
+  { id: 2, icon: "👥", msg: "120 users joined meditation session", sub: "Energy is high right now", delay: 12000 },
+  { id: 3, icon: "⏰", msg: "New live yoga session starts in 10 min", sub: "Vinyasa Flow with Rahul Verma", delay: 22000 },
+  { id: 4, icon: "🔥", msg: "Your meditation streak reached 7 days", sub: "You're on fire! Keep going", delay: 35000 },
+  { id: 5, icon: "🌊", msg: "Breathing session is now live", sub: "Join 312 people breathing together", delay: 48000 },
+];
+
+// Global booking notification emitter
+const bookingNotifListeners = new Set();
+function emitBookingNotification(notif) {
+  bookingNotifListeners.forEach((fn) => fn(notif));
+}
+
+function NotificationSystem() {
+  const [notifs, setNotifs] = useState([]);
+  const [bellPulse, setBellPulse] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [allHistory, setAllHistory] = useState([...NOTIF_DATA]);
+
+  const pushNotif = useCallback((n) => {
+    const uid = Date.now() + Math.random();
+    setNotifs((prev) => [...prev, { ...n, uid }]);
+    setUnread((u) => u + 1);
+    setBellPulse(true);
+    setTimeout(() => setBellPulse(false), 1200);
+    setTimeout(() => setNotifs((prev) => prev.filter((x) => x.uid !== uid)), 7000);
+  }, []);
+
+  // Ambient auto-notifications
+  useEffect(() => {
+    const timers = NOTIF_DATA.map((n) =>
+      setTimeout(() => {
+        pushNotif(n);
+        setAllHistory((prev) => [{ ...n, uid: Date.now() }, ...prev.filter((x) => x.id !== n.id)]);
+      }, n.delay)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [pushNotif]);
+
+  // Booking notification listener
+  useEffect(() => {
+    const handler = (notif) => {
+      pushNotif(notif);
+      setAllHistory((prev) => [{ ...notif, uid: Date.now() }, ...prev]);
+    };
+    bookingNotifListeners.add(handler);
+    return () => bookingNotifListeners.delete(handler);
+  }, [pushNotif]);
+
+  const dismiss = (uid) => setNotifs((prev) => prev.filter((x) => x.uid !== uid));
+
+  return (
+    <>
+      {/* Bell button */}
+      <motion.button
+        onClick={() => { setPanelOpen((v) => !v); setUnread(0); }}
+        animate={bellPulse ? { rotate: [-8, 8, -6, 6, -3, 3, 0] } : {}}
+        transition={{ duration: 0.5 }}
+        whileHover={{ scale: 1.1, boxShadow: "0 0 20px rgba(139,92,246,0.5)" }}
+        style={{ position: "fixed", top: 82, right: 20, zIndex: 1500, width: 44, height: 44, borderRadius: "50%", background: "rgba(10,22,40,0.9)", backdropFilter: "blur(16px)", border: "1px solid rgba(139,92,246,0.3)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 19, boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
+        🔔
+        {unread > 0 && (
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{ position: "absolute", top: -3, right: -3, width: 18, height: 18, borderRadius: "50%", background: "linear-gradient(135deg, #ef4444, #dc2626)", border: "2px solid #0a1628", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff", fontWeight: 800 }}>
+            {unread > 9 ? "9+" : unread}
+          </motion.div>
+        )}
+      </motion.button>
+
+      {/* Notification panel */}
+      <AnimatePresence>
+        {panelOpen && (
+          <motion.div initial={{ opacity: 0, scale: 0.9, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: -10 }} transition={{ duration: 0.2 }}
+            style={{ position: "fixed", top: 132, right: 20, zIndex: 1499, width: 320, background: "rgba(10,22,40,0.96)", backdropFilter: "blur(24px)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 18, padding: 14, boxShadow: "0 24px 60px rgba(0,0,0,0.6)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: 700 }}>Notifications</span>
+              <button onClick={() => setNotifs([])} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 11, cursor: "pointer" }}>Clear all</button>
+            </div>
+            {allHistory.slice(0, 8).map((n, idx) => (
+              <div key={n.uid || n.id || idx} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <span style={{ fontSize: 22, flexShrink: 0 }}>{n.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>{n.msg}</div>
+                  <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, marginTop: 2 }}>{n.sub}</div>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast stack */}
+      <div style={{ position: "fixed", bottom: 100, right: 20, zIndex: 1498, display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+        <AnimatePresence>
+          {notifs.slice(-3).map((n) => (
+            <motion.div key={n.uid}
+              initial={{ opacity: 0, x: 80, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 80, scale: 0.9 }}
+              whileHover={{ scale: 1.03, boxShadow: n.isBooking ? "0 12px 40px rgba(52,211,153,0.45)" : n.isContact ? "0 12px 40px rgba(56,189,248,0.4)" : "0 12px 40px rgba(139,92,246,0.4)" }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              style={{ background: n.isBooking ? "rgba(5,24,18,0.97)" : n.isContact ? "rgba(5,18,28,0.97)" : "rgba(10,22,40,0.96)", backdropFilter: "blur(20px)", border: `1px solid ${n.isBooking ? "rgba(52,211,153,0.4)" : n.isContact ? "rgba(56,189,248,0.35)" : "rgba(139,92,246,0.25)"}`, borderRadius: 14, padding: "12px 14px", width: 300, display: "flex", gap: 10, alignItems: "flex-start", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", cursor: "pointer", position: "relative", overflow: "hidden" }}>
+              {/* Glow border accent */}
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, borderRadius: "14px 14px 0 0", background: n.isBooking ? "linear-gradient(90deg, #34d399, #059669)" : n.isContact ? "linear-gradient(90deg, #38bdf8, #0ea5e9)" : "linear-gradient(90deg, #7c3aed, #ec4899)", opacity: 0.85 }} />
+              <span style={{ fontSize: 22, flexShrink: 0 }}>{n.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: "#fff", fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>{n.msg}</div>
+                <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 10, marginTop: 2 }}>{n.sub}</div>
+              </div>
+              <motion.button whileHover={{ scale: 1.2 }} onClick={() => dismiss(n.uid)}
+                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.25)", cursor: "pointer", fontSize: 14, flexShrink: 0, padding: 0, lineHeight: 1 }}>✕</motion.button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────
    HOME PAGE — UPGRADED HERO WITH AUTO SLIDER
 ───────────────────────────────────────── */
-function HeroSlider({ c, setBookingModal }) {
+function HeroSlider({ c, setBookingModal, setLiveModal }) {
   const [current, setCurrent] = useState(0);
   const [prev, setPrev] = useState(null);
 
@@ -539,6 +1693,8 @@ function HeroSlider({ c, setBookingModal }) {
               style={{ background: "rgba(255,255,255,0.1)", backdropFilter: "blur(12px)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 14, padding: "16px 40px", fontSize: 16, fontWeight: 500, fontFamily: "inherit", cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center", transition: "background 0.2s" }}>
               Explore Classes
             </motion.a>
+            {/* ── LIVE CLASSES CTA ── */}
+            <LiveHeroButton onClick={() => setLiveModal(true)} />
           </motion.div>
         </div>
       </div>
@@ -559,11 +1715,15 @@ function HeroSlider({ c, setBookingModal }) {
   );
 }
 
-function HomePage({ c, setBookingModal }) {
+function HomePage({ c, setBookingModal, setLiveModal }) {
   const [quoteIdx, setQuoteIdx] = useState(0);
   const [quoteKey, setQuoteKey] = useState(0);
   const [statsVisible, setStatsVisible] = useState(false);
   const statsRef = useRef(null);
+  const [liveCurrentTime, setLiveCurrentTime] = useState(0);
+  const [liveDuration, setLiveDuration] = useState(0);
+  const [liveIsPlaying, setLiveIsPlaying] = useState(true);
+  const liveVideoRef = useRef(null);
 
   const exp = useCountUp(10, 1800, statsVisible);
   const students = useCountUp(5000, 2200, statsVisible);
@@ -577,10 +1737,12 @@ function HomePage({ c, setBookingModal }) {
 
   const nextQuote = () => { setQuoteIdx((i) => (i + 1) % QUOTES.length); setQuoteKey((k) => k + 1); };
 
+  const formatTime = (secs) => `${Math.floor(secs / 60).toString().padStart(2, '0')}:${Math.floor(secs % 60).toString().padStart(2, '0')}`;
+
   return (
     <PageWrapper>
       {/* HERO SLIDER */}
-      <HeroSlider c={c} setBookingModal={setBookingModal} />
+      <HeroSlider c={c} setBookingModal={setBookingModal} setLiveModal={setLiveModal} />
 
       {/* WHY PRANA - features strip */}
       <div style={{ background: c.card, padding: "0 clamp(24px, 8vw, 80px)" }}>
@@ -1251,7 +2413,28 @@ function ContactPage({ c }) {
     return e;
   };
 
-  const handleSubmit = () => { const e = validate(); if (Object.keys(e).length) return setErrors(e); setSubmitted(true); };
+  const handleSubmit = () => {
+    const e = validate();
+    if (Object.keys(e).length) return setErrors(e);
+    setSubmitted(true);
+    // Fire contact notification
+    emitBookingNotification({
+      id: Date.now(),
+      icon: "🕊️",
+      msg: `Message sent! Thank you, ${form.name.split(" ")[0]}`,
+      sub: "We'll get back to you within 24 hours · Praṇa Studio",
+      isContact: true,
+    });
+    setTimeout(() => {
+      emitBookingNotification({
+        id: Date.now() + 1,
+        icon: "📬",
+        msg: "We received your wellness inquiry",
+        sub: "Our team will contact you shortly 🌿",
+        isContact: true,
+      });
+    }, 2800);
+  };
   const inp = { background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "12px 16px", color: c.text, width: "100%", outline: "none", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" };
 
   return (
@@ -1451,6 +2634,7 @@ function AppInner() {
   const { dark, toggle, colors: c } = useTheme();
   const [loaded, setLoaded] = useState(false);
   const [bookingModal, setBookingModal] = useState(null);
+  const [liveModal, setLiveModal] = useState(false);
   const location = useLocation();
 
   return (
@@ -1463,7 +2647,7 @@ function AppInner() {
           <Navbar c={c} dark={dark} toggleDark={toggle} setBookingModal={setBookingModal} />
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
-              <Route path="/" element={<HomePage c={c} setBookingModal={setBookingModal} />} />
+              <Route path="/" element={<HomePage c={c} setBookingModal={setBookingModal} setLiveModal={setLiveModal} />} />
               <Route path="/classes" element={<ClassesPage c={c} setBookingModal={setBookingModal} />} />
               <Route path="/schedule" element={<SchedulePage c={c} setBookingModal={setBookingModal} />} />
               <Route path="/instructors" element={<InstructorsPage c={c} />} />
@@ -1475,8 +2659,12 @@ function AppInner() {
           </AnimatePresence>
           <Footer c={c} />
           <FloatingButtons c={c} setBookingModal={setBookingModal} />
+          <NotificationSystem />
           <AnimatePresence>
             {bookingModal && <BookingModal item={bookingModal.item} type={bookingModal.type} onClose={() => setBookingModal(null)} c={c} />}
+          </AnimatePresence>
+          <AnimatePresence>
+            {liveModal && <LiveClassModal onClose={() => setLiveModal(false)} />}
           </AnimatePresence>
         </>
       )}
